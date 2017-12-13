@@ -4,6 +4,13 @@ import numpy as np
 
 EXE = "../measure"
 
+def get_human_size(size):
+    power_to_letter = [(10**9, "G"), (10**6, "M"), (10**3, 'K')]
+    for power, letter in power_to_letter:
+        if size % power == 0:
+            return str(size // power) + letter
+
+    
 cache_size = 10**6
 is_hit_size = 194867
 num_requests = 10**7
@@ -19,6 +26,7 @@ for typ in ["list", "heap"]:
         times.append(time)
     lines[typ], = plt.plot(hit_rates, times)
 
+plt.title("Cache size = {}".format(get_human_size(cache_size)))
 plt.xlabel("Hit rate")
 plt.ylabel("Mean access time, ns")
 plt.legend(lines.values(), lines.keys())
