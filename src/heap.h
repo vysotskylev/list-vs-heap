@@ -2,39 +2,33 @@
 
 #include <vector>
 
-template <typename KeyT, typename DataT>
+template <typename KeyT, typename DataT, typename SwapFunT>
 class Heap
 {
 public:
-    struct Element
-    {
-        KeyT Key;
-        DataT Data;
-        Element(KeyT key, DataT data)
-            : Key(std::move(key))
-            , Data(std::move(data))
-        { }
-    };
+    template <typename KeyIter, typename DataIter>
+    Heap(size_t arity, KeyIter keyBegin, KeyIter keyEnd, DataIter dataBegin, DataIter dataEnd, SwapFunT = SwapFunT());
 
-    template <typename Iter>
-    Heap(size_t arity, Iter begin, Iter end);
+    Heap(size_t arity, SwapFunT = SwapFunT());
 
-    Heap(size_t arity);
-
-    template <typename Iter>
-    void Assign(Iter begin, Iter end);
+    template <typename KeyIter, typename DataIter>
+    void Assign(KeyIter keyBegin, KeyIter keyEnd, DataIter dataBegin, DataIter dataEnd);
 
     size_t Size() const;
 
+    DataT GetMin() const;
     void IncreaseKey(uint64_t idx, KeyT newKey);
     void DeleteMinAndInsert(KeyT key, DataT data);
 
 private:
-    std::vector<Element> Els;
+    std::vector<KeyT> Keys;
+    std::vector<DataT> Els;
     size_t Arity;
+    SwapFunT SwapFun;
     
     const uint64_t INVALID_IDX = std::numeric_limits<uint64_t>::max();
 
+    void Swap(uint64_t first, uint64_t second);
     uint64_t GetMinChild(uint64_t idx) const;
     void BubbleDown(uint64_t idx);
 };

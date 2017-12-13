@@ -1,58 +1,87 @@
 #include <list>
 #include <random>
+#include <unordered_map>
 
 #include "heap.h"
+
+template <typename CacheIter>
+struct SwapFun
+{
+    void operator() (CacheIter lhs, CacheIter rhs)
+    {
+        std::swap(lhs->second, rhs->second);
+    }
+};
 
 template <typename DataT>
 class HeapCache
 {
 private:
-    using HeapT = Heap<uint64_t, DataT>;
+    using CacheT = std::unordered_map<DataT, uint64_t>;
+    using CacheIter = typename CacheT::iterator;
+    using HeapT = Heap<uint64_t, CacheIter, SwapFun<CacheIter>>;
 
 public:
-    using Iterator = uint64_t;
-
-    HeapCache(size_t arity, size_t size)
-        : Impl(arity)
+    template <typename Iter>
+    HeapCache(size_t arity, Iter begin, Iter end)
+        : EvictionHeap(arity)
         , CurrentTs(0)
     {
-        std::vector<typename HeapT::Element> elements;
-        elements.reserve(size);
-        for (size_t i = 0; i < size; ++i) {
-            elements.emplace_back(CurrentTs++, DataT());
+        std::vector<CacheIter> els;
+        uint64_t idx = 0;
+        size_t size = 0;
+        for (auto it = begin; it != end; ++it) {
+            auto res = Cache.emplace(*it, idx++);
+            els.push_back(res.first);
+            size++;
         }
-        Impl.Assign(elements.begin(), elements.end());
+        std::vector<uint64_t> keys(size);
+        std::iota(keys.begin(), keys.end(), uint64_t(0));
+        EvictionHeap.Assign(keys.begin(), keys.end(), els.begin(), els.end());
+        CurrentTs = size;
     }
 
     size_t Size() const
     {
-        return Impl.Size();
+        return Cache.size();
     }
 
-    void Hit(uint64_t idx)
+    bool Access(DataT x)
     {
-        Impl.IncreaseKey(idx, CurrentTs);
-        ++CurrentTs;
+        auto it = Cache.find(x);
+        if (it == Cache.end()) {
+            Miss(std::move(x));
+            return false;
+        } else {
+            Hit(it);
+            return true;
+        }
     }
 
-    void Miss()
+    DataT GetLastEvicted() const
     {
-        Impl.DeleteMinAndInsert(CurrentTs, DataT());
-        ++CurrentTs;
-    }
-
-    std::vector<uint64_t> CreateRequests(size_t size) const
-    {
-        std::vector<uint64_t> allInds(Size());
-        std::iota(allInds.begin(), allInds.end(), uint64_t(0));
-        std::mt19937 randGen(43);
-        std::shuffle(allInds.begin(), allInds.end(), randGen);
-        return {allInds.begin(), allInds.begin() + size};
+        return LastEvicted;
     }
 
 private:
-    HeapT Impl;
+    HeapT EvictionHeap;
+    CacheT Cache;
     uint64_t CurrentTs;
+    DataT LastEvicted;
+
+    void Hit(CacheIter it)
+    {
+        EvictionHeap.IncreaseKey(it->second, CurrentTs++);
+    }
+
+    void Miss(DataT x)
+    {
+        auto it = EvictionHeap.GetMin();
+        LastEvicted = it->first;
+        Cache.erase(it);
+        auto res = Cache.emplace(std::move(x), 0);
+        EvictionHeap.DeleteMinAndInsert(CurrentTs++, res.first);
+    }
 };
 
 //////////////////////////////////////////////////
@@ -60,43 +89,65 @@ private:
 template <typename DataT>
 class ListCache {
 private:
-    using ListT = std::list<DataT>;
-public:
-    using Iterator = typename ListT::const_iterator;
+    struct CacheIterWrapper;
+    using ListT = std::list<CacheIterWrapper>;
+    using CacheT = std::unordered_map<DataT, typename ListT::iterator>;
+    using CacheIter = typename CacheT::iterator;
+    struct CacheIterWrapper
+        : public CacheIter
+    {
+        CacheIterWrapper(CacheIter it) : CacheIter(it) { }
+    };
 
-    ListCache(size_t size)
-        : Impl(size, DataT())
-    { }
+public:
+    template <typename Iter>
+    ListCache(Iter begin, Iter end)
+    {
+        for (auto it = begin; it != end; ++it) {
+            EvictionList.push_back(Cache.end());
+            auto res = Cache.emplace(*it, std::prev(EvictionList.end()));
+            *EvictionList.rbegin() = res.first;
+        }
+    }
 
     size_t Size() const
     {
-        return Impl.size();
+        return Cache.size();
     }
 
-    void Hit(Iterator it)
+    bool Access(DataT x)
     {
-        if (it == Impl.begin()) {
-            return;
+        auto it = Cache.find(x);
+        if (it == Cache.end()) {
+            Miss(x);
+            return false;
+        } else {
+            Hit(it);
+            return true;
         }
-        Impl.splice(Impl.begin(), Impl, it);
     }
 
-    void Miss()
+    DataT GetLastEvicted() const
     {
-        auto last = std::prev(Impl.end());
-        *last = DataT();
-        Hit(last);
+        return LastEvicted;
     }
-
-    std::vector<Iterator> CreateRequests(size_t size) const
-    {
-        std::vector<Iterator> allIters(Size());
-        std::iota(allIters.begin(), allIters.end(), Impl.begin());
-        std::mt19937 randGen(44);
-        std::shuffle(allIters.begin(), allIters.end(), randGen);
-        return {allIters.begin(), allIters.begin() + size};
-    }
-
 private:
-    ListT Impl;
+    CacheT Cache;
+    ListT EvictionList;
+    DataT LastEvicted;
+
+    void Hit(CacheIterWrapper it)
+    {
+        EvictionList.splice(EvictionList.end(), EvictionList, it->second);
+    }
+
+    void Miss(DataT x)
+    {
+        auto lru = EvictionList.begin();
+        LastEvicted = (*lru)->first;
+        auto res = Cache.emplace(std::move(x), lru);
+        Cache.erase(*lru);
+        *lru = res.first;
+        EvictionList.splice(EvictionList.end(), EvictionList, lru);
+    }
 };

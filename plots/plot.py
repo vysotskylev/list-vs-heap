@@ -12,7 +12,6 @@ def get_human_size(size):
 
     
 cache_size = 10**6
-is_hit_size = 194867
 num_requests = 10**7
 hit_rates = np.linspace(0, 1, num=30)
 
@@ -21,7 +20,7 @@ lines = {}
 for typ in ["list", "heap"]:
     times = []
     for hit_rate in hit_rates:
-        args = map(str, [EXE, typ, cache_size, is_hit_size, num_requests, hit_rate])
+        args = map(str, [EXE, typ, cache_size, num_requests, hit_rate])
         time = float(subprocess.check_output(args).split()[0]) / num_requests * 10**9
         times.append(time)
     lines[typ], = plt.plot(hit_rates, times)

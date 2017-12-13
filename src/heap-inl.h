@@ -1,69 +1,84 @@
 #include <algorithm>
 
-template <typename KeyT, typename DataT>
-template <typename Iter>
-Heap<KeyT, DataT>::Heap(size_t arity, Iter begin, Iter end)
-    : Els(begin, end)
+template <typename KeyT, typename DataT, typename SwapFunT>
+template <typename KeyIter, typename DataIter>
+Heap<KeyT, DataT, SwapFunT>::Heap(size_t arity, KeyIter keyBegin, KeyIter keyEnd, DataIter dataBegin, DataIter dataEnd, SwapFunT fun)
+    : Keys(keyBegin, keyEnd)
+    , Els(dataBegin, dataEnd)
     , Arity(arity)
+    , SwapFun(fun)
 { }
 
-template <typename KeyT, typename DataT>
-Heap<KeyT, DataT>::Heap(size_t arity)
+template <typename KeyT, typename DataT, typename SwapFunT>
+Heap<KeyT, DataT, SwapFunT>::Heap(size_t arity, SwapFunT fun)
     : Arity(arity)
+    , SwapFun(fun)
 { }
 
-template <typename KeyT, typename DataT>
-template <typename Iter>
-void Heap<KeyT, DataT>::Assign(Iter begin, Iter end)
+template <typename KeyT, typename DataT, typename SwapFunT>
+template <typename KeyIter, typename DataIter>
+void Heap<KeyT, DataT, SwapFunT>::Assign(KeyIter keyBegin, KeyIter keyEnd, DataIter dataBegin, DataIter dataEnd)
 {
-    Els.assign(begin, end);
+    Keys.assign(keyBegin, keyEnd);
+    Els.assign(dataBegin, dataEnd);
 }
 
-template <typename KeyT, typename DataT>
-size_t Heap<KeyT, DataT>::Size() const
+template <typename KeyT, typename DataT, typename SwapFunT>
+size_t Heap<KeyT, DataT, SwapFunT>::Size() const
 {
-    return Els.size();
+    return Keys.size();
 }
 
-template <typename KeyT, typename DataT>
-void Heap<KeyT, DataT>::IncreaseKey(uint64_t idx, KeyT newKey)
+template <typename KeyT, typename DataT, typename SwapFunT>
+DataT Heap<KeyT, DataT, SwapFunT>::GetMin() const
 {
-    Els[idx].Key = std::move(newKey);
+    return Els[0];
+}
+
+template <typename KeyT, typename DataT, typename SwapFunT>
+void Heap<KeyT, DataT, SwapFunT>::IncreaseKey(uint64_t idx, KeyT newKey)
+{
+    Keys[idx] = std::move(newKey);
     BubbleDown(idx);
 }
 
-template <typename KeyT, typename DataT>
-void Heap<KeyT, DataT>::DeleteMinAndInsert(KeyT key, DataT data)
+template <typename KeyT, typename DataT, typename SwapFunT>
+void Heap<KeyT, DataT, SwapFunT>::DeleteMinAndInsert(KeyT key, DataT data)
 {
-    Els[0].Key = std::move(key);
-    Els[0].Data = std::move(data);
+    Keys[0] = std::move(key);
+    Els[0] = std::move(data);
     BubbleDown(0);
 }
 
-template <typename KeyT, typename DataT>
-uint64_t Heap<KeyT, DataT>::GetMinChild(uint64_t idx) const
+template <typename KeyT, typename DataT, typename SwapFunT>
+void Heap<KeyT, DataT, SwapFunT>::Swap(uint64_t first, uint64_t second)
 {
-    auto firstChild = idx * Arity + 1;
-    if (firstChild >= Els.size()) {
-        return INVALID_IDX;
-    }
-    auto afterLastChild = std::min(firstChild + Arity, Els.size());
-    auto minIt = std::min_element(&Els[firstChild], &Els[afterLastChild],
-        [] (const Element& a, const Element& b) {
-            return a.Key < b.Key;
-        });
-    return minIt - &Els[0];
+    std::swap(Keys[first], Keys[second]);
+    std::swap(Els[first], Els[second]);
+    SwapFun(Els[first], Els[second]);
 }
 
-template <typename KeyT, typename DataT>
-void Heap<KeyT, DataT>::BubbleDown(uint64_t idx)
+template <typename KeyT, typename DataT, typename SwapFunT>
+uint64_t Heap<KeyT, DataT, SwapFunT>::GetMinChild(uint64_t idx) const
+{
+    auto firstChild = idx * Arity + 1;
+    if (firstChild >= Keys.size()) {
+        return INVALID_IDX;
+    }
+    auto afterLastChild = std::min(firstChild + Arity, Keys.size());
+    auto minIt = std::min_element(&Keys[firstChild], &Keys[afterLastChild]);
+    return minIt - &Keys[0];
+}
+
+template <typename KeyT, typename DataT, typename SwapFunT>
+void Heap<KeyT, DataT, SwapFunT>::BubbleDown(uint64_t idx)
 {
     while (true) {
         auto minChild = this->GetMinChild(idx);
-        if (minChild == INVALID_IDX || Els[idx].Key < Els[minChild].Key) {
+        if (minChild == INVALID_IDX) {
             break;
         }
-        std::swap(Els[idx], Els[minChild]);
+        Swap(idx, minChild);
         idx = minChild;
     }
 }
